@@ -1,0 +1,199 @@
+# YouTube AI CLI - Development Makefile
+
+.PHONY: help install install-dev test test-fast test-slow lint format type-check clean build upload-pypi docs serve-docs example
+
+# Default target
+help:
+	@echo "YouTube AI CLI - Development Commands"
+	@echo "====================================="
+	@echo "Setup:"
+	@echo "  install       Install package in development mode"
+	@echo "  install-dev   Install with development dependencies"
+	@echo ""
+	@echo "Testing:"
+	@echo "  test          Run all tests"
+	@echo "  test-fast     Run fast tests only"
+	@echo "  test-slow     Run slow/integration tests"
+	@echo "  test-cov      Run tests with coverage report"
+	@echo ""
+	@echo "Code Quality:"
+	@echo "  lint          Run linting checks"
+	@echo "  format        Format code with black and isort"
+	@echo "  type-check    Run type checking with mypy"
+	@echo "  quality       Run all quality checks"
+	@echo ""
+	@echo "Development:"
+	@echo "  clean         Clean build artifacts"
+	@echo "  build         Build package"
+	@echo "  example       Run example usage script"
+	@echo ""
+	@echo "Documentation:"
+	@echo "  docs          Build documentation"
+	@echo "  serve-docs    Serve documentation locally"
+
+# Installation
+install:
+	pip install -e .
+
+install-dev:
+	pip install -e ".[dev]"
+	pre-commit install
+
+# Testing
+test:
+	pytest tests/ -v
+
+test-fast:
+	pytest tests/ -v -m "not slow and not integration"
+
+test-slow:
+	pytest tests/ -v -m "slow or integration"
+
+test-cov:
+	pytest tests/ -v --cov=youtube_ai --cov-report=html --cov-report=term-missing
+
+test-api:
+	pytest tests/ -v -m "requires_api"
+
+# Code Quality
+lint:
+	flake8 src/ tests/
+	black --check src/ tests/
+	isort --check-only src/ tests/
+
+format:
+	black src/ tests/
+	isort src/ tests/
+
+type-check:
+	mypy src/youtube_ai/ --ignore-missing-imports
+
+quality: lint type-check test-fast
+
+# Development
+clean:
+	rm -rf build/
+	rm -rf dist/
+	rm -rf *.egg-info/
+	rm -rf .pytest_cache/
+	rm -rf .coverage
+	rm -rf htmlcov/
+	find . -type d -name __pycache__ -delete
+	find . -type f -name "*.pyc" -delete
+
+build: clean
+	python -m build
+
+upload-pypi: build
+	python -m twine upload dist/*
+
+# Examples
+example:
+	python examples/basic_usage.py
+
+example-script:
+	python -m youtube_ai generate script --topic "AI in 2025" --style educational --duration 300
+
+example-config:
+	python -m youtube_ai config show
+
+# Development setup
+setup-dev: install-dev
+	@echo "Development environment setup complete!"
+	@echo "Run 'make example-config' to check configuration"
+
+# Quick development cycle
+dev: format type-check test-fast
+	@echo "Development cycle complete!"
+
+# CI pipeline simulation
+ci: quality test
+	@echo "CI pipeline simulation complete!"
+
+# Documentation (if you add docs later)
+docs:
+	@echo "Documentation build not yet implemented"
+
+serve-docs:
+	@echo "Documentation serve not yet implemented"
+
+# Configuration validation
+validate-config:
+	python -m youtube_ai config validate
+
+# Show CLI help
+cli-help:
+	python -m youtube_ai --help
+
+# Development utilities
+check-deps:
+	pip check
+
+list-deps:
+	pip list
+
+freeze-deps:
+	pip freeze > requirements-frozen.txt
+
+# Git hooks
+install-hooks:
+	pre-commit install
+	pre-commit install --hook-type commit-msg
+
+run-hooks:
+	pre-commit run --all-files
+
+# Database/Cache cleanup (if needed)
+clean-cache:
+	rm -rf ~/.youtube-ai/cache/
+	rm -rf /tmp/youtube_ai/
+
+# Environment setup
+env-example:
+	@echo "# YouTube AI CLI Environment Variables" > .env.example
+	@echo "OPENAI_API_KEY=your_openai_api_key_here" >> .env.example
+	@echo "ANTHROPIC_API_KEY=your_anthropic_api_key_here" >> .env.example
+	@echo "YOUTUBE_API_KEY=your_youtube_api_key_here" >> .env.example
+	@echo "ELEVENLABS_API_KEY=your_elevenlabs_api_key_here" >> .env.example
+	@echo "OUTPUT_DIR=./output" >> .env.example
+	@echo "DEBUG=false" >> .env.example
+	@echo "Created .env.example file"
+
+# Security checks
+security-check:
+	bandit -r src/
+	safety check
+
+# Performance profiling
+profile-script:
+	python -m cProfile -o profile_output.prof examples/basic_usage.py
+	python -c "import pstats; pstats.Stats('profile_output.prof').sort_stats('cumulative').print_stats(20)"
+
+# Docker support (for future)
+docker-build:
+	@echo "Docker support not yet implemented"
+
+docker-run:
+	@echo "Docker support not yet implemented"
+
+# Release preparation
+prepare-release: clean quality test build
+	@echo "Release preparation complete!"
+	@echo "Version: $(shell python setup.py --version)"
+	@echo "Ready for release!"
+
+# Help for specific commands
+help-test:
+	@echo "Testing Commands:"
+	@echo "  test          - Run all tests with pytest"
+	@echo "  test-fast     - Run only fast tests (exclude slow/integration)"
+	@echo "  test-slow     - Run slow and integration tests"
+	@echo "  test-cov      - Run tests with coverage report"
+	@echo "  test-api      - Run tests that require API access"
+
+help-quality:
+	@echo "Code Quality Commands:"
+	@echo "  lint          - Check code style with flake8, black, isort"
+	@echo "  format        - Format code with black and isort"
+	@echo "  type-check    - Run type checking with mypy"
+	@echo "  quality       - Run all quality checks"

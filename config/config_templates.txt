@@ -1,0 +1,82 @@
+# Educational Video Template
+# Use this template for creating educational content
+
+# Content Configuration
+content:
+  style: "educational"
+  target_audience: "students"
+  language: "en"
+  include_intro: true
+  include_outro: true
+  
+  # Educational-specific settings
+  pace: "moderate"  # slow, moderate, fast
+  complexity: "intermediate"  # beginner, intermediate, advanced
+  include_examples: true
+  include_summary: true
+
+# Video Settings
+video:
+  resolution: "1080p"
+  fps: 30
+  format: "mp4"
+  style: "slideshow"
+  
+  # Visual settings for educational content
+  background_color: "#f8f9fa"  # Light background for readability
+  text_color: "#212529"        # Dark text for contrast
+  accent_color: "#007bff"      # Blue for highlights
+  font_size: 48
+  
+  # Timing
+  intro_duration: 5
+  outro_duration: 5
+  transition_duration: 1
+
+# Audio Settings
+audio:
+  voice: "alloy"  # Professional, clear voice
+  speed: 0.9      # Slightly slower for educational content
+  background_music: true
+  music_volume: 0.05  # Very low volume for background
+  pause_between_sections: 1.0
+
+# SEO Settings
+seo:
+  include_keywords_in_title: true
+  include_educational_tags: true
+  description_style: "informative"
+  
+  # Common educational keywords to include
+  default_keywords:
+    - "tutorial"
+    - "learn"
+    - "education"
+    - "how to"
+    - "explained"
+    - "guide"
+
+# YouTube Upload Settings
+youtube:
+  category: "27"  # Education category
+  privacy: "public"
+  made_for_kids: false
+  
+  # Educational video best practices
+  include_chapters: true
+  include_transcript: true
+  include_resources: true
+
+# Workflow Settings
+workflow:
+  auto_generate_thumbnail: true
+  auto_optimize_seo: true
+  auto_create_chapters: true
+  save_intermediate_files: true
+
+# Output Settings
+output:
+  create_subtitle_file: true
+  create_transcript: true
+  create_summary: true
+  export_audio: true

@@ -1,0 +1,19 @@
+1
+00:00:00,000 --> 00:00:06,159
+Welcome to this exciting tutorial about the future of artificial intelligence
+
+2
+00:00:06,159 --> 00:00:12,319
+In today's video, we'll explore how AI is transforming our world in ways we never imagined possible
+
+3
+00:00:12,319 --> 00:00:18,479
+From self-driving cars to intelligent virtual assistants, AI is becoming an integral part of our daily lives
+
+4
+00:00:18,479 --> 00:00:24,639
+We'll discover the key technologies behind these innovations and what they mean for our future
+
+5
+00:00:24,639 --> 00:00:30,799
+Thank you for watching, and don't forget to subscribe for more amazing content about technology and innovation

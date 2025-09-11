@@ -1,0 +1,77 @@
+# YouTube AI CLI - Docker Image
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    # Required for video processing
+    ffmpeg \
+    # Required for some Python packages
+    gcc \
+    g++ \
+    make \
+    # Required for downloading files
+    wget \
+    curl \
+    # Required for image processing
+    libjpeg-dev \
+    libpng-dev \
+    # Clean up
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user
+RUN useradd --create-home --shell /bin/bash app
+
+# Set work directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY src/ ./src/
+COPY config/ ./config/
+COPY setup.py .
+COPY README.md .
+
+# Install the application
+RUN pip install -e .
+
+# Create necessary directories
+RUN mkdir -p /app/output /app/cache /app/logs && \
+    chown -R app:app /app
+
+# Switch to app user
+USER app
+
+# Create config directory in user home
+RUN mkdir -p /home/app/.youtube-ai
+
+# Set default environment variables
+ENV OUTPUT_DIR=/app/output \
+    CACHE_DIR=/app/cache \
+    LOG_LEVEL=INFO
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import youtube_ai; print('OK')" || exit 1
+
+# Default command
+CMD ["python", "-m", "youtube_ai", "--help"]
+
+# Labels
+LABEL org.opencontainers.image.title="YouTube AI CLI" \
+      org.opencontainers.image.description="AI-powered YouTube automation CLI" \
+      org.opencontainers.image.version="0.1.0" \
+      org.opencontainers.image.authors="YouTube AI CLI Team" \
+      org.opencontainers.image.url="https://github.com/yourusername/youtube-ai-cli" \
+      org.opencontainers.image.source="https://github.com/yourusername/youtube-ai-cli" \
+      org.opencontainers.image.licenses="MIT"

@@ -1,0 +1,222 @@
+groups:
+  - name: youtube-ai-cli.rules
+    rules:
+      # Application Health Alerts
+      - alert: YouTubeAIServiceDown
+        expr: up{job="youtube-ai-cli"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: youtube-ai-cli
+        annotations:
+          summary: "YouTube AI CLI service is down"
+          description: "YouTube AI CLI service has been down for more than 1 minute"
+          runbook_url: "https://docs.youtube-ai-cli.com/runbooks/service-down"
+
+      - alert: YouTubeAIHighErrorRate
+        expr: (rate(youtube_ai_errors_total[5m]) / rate(youtube_ai_requests_total[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+          service: youtube-ai-cli
+        annotations:
+          summary: "High error rate in YouTube AI CLI"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+          runbook_url: "https://docs.youtube-ai-cli.com/runbooks/high-error-rate"
+
+      - alert: YouTubeAIHighLatency
+        expr: histogram_quantile(0.95, rate(youtube_ai_request_duration_seconds_bucket[5m])) > 30
+        for: 3m
+        labels:
+          severity: warning
+          service: youtube-ai-cli
+        annotations:
+          summary: "High latency in YouTube AI CLI"
+          description: "95th percentile latency is {{ $value }}s over the last 5 minutes"
+          runbook_url: "https://docs.youtube-ai-cli.com/runbooks/high-latency"
+
+      # Resource Usage Alerts
+      - alert: YouTubeAIHighMemoryUsage
+        expr: (container_memory_usage_bytes{container="youtube-ai-cli"} / container_spec_memory_limit_bytes{container="youtube-ai-cli"}) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: youtube-ai-cli
+        annotations:
+          summary: "High memory usage in YouTube AI CLI"
+          description: "Memory usage is {{ $value | humanizePercentage }} of the limit"
+          runbook_url: "https://docs.youtube-ai-cli.com/runbooks/high-memory"
+
+      - alert: YouTubeAIHighCPUUsage
+        expr: (rate(container_cpu_usage_seconds_total{container="youtube-ai-cli"}[5m]) / container_spec_cpu_quota{container="youtube-ai-cli"} * container_spec_cpu_period{container="youtube-ai-cli"}) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: youtube-ai-cli
+        annotations:
+          summary: "High CPU usage in YouTube AI CLI"
+          description: "CPU usage is {{ $value | humanizePercentage }} of the limit"
+          runbook_url: "https://docs.youtube-ai-cli.com/runbooks/high-cpu"
+
+      # Business Logic Alerts
+      - alert: YouTubeAIFailedUploads
+        expr: rate(youtube_ai_upload_failures_total[10m]) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+          service: youtube-ai-cli
+        annotations:
+          summary: "High rate of failed YouTube uploads"
+          description: "YouTube upload failure rate is {{ $value }} per second over the last 10 minutes"
+          runbook_url: "https://docs.youtube-ai-cli.com/runbooks/upload-failures"
+
+      - alert: YouTubeAIAPIQuotaExhausted
+        expr: youtube_ai_api_quota_remaining < 100
+        for: 0m
+        labels:
+          severity: critical
+          service: youtube-ai-cli
+        annotations:
+          summary: "YouTube AI API quota nearly exhausted"
+          description: "API quota remaining: {{ $value }} requests"
+          runbook_url: "https://docs.youtube-ai-cli.com/runbooks/quota-exhausted"
+
+      - alert: YouTubeAIBatchJobStuck
+        expr: youtube_ai_batch_job_duration_seconds > 3600
+        for: 0m
+        labels:
+          severity: warning
+          service: youtube-ai-cli
+        annotations:
+          summary: "Batch job running for over 1 hour"
+          description: "Batch job {{ $labels.job_id }} has been running for {{ $value | humanizeDuration }}"
+          runbook_url: "https://docs.youtube-ai-cli.com/runbooks/stuck-batch-job"
+
+      # Cost Monitoring Alerts
+      - alert: YouTubeAIHighDailyCost
+        expr: increase(youtube_ai_cost_usd_total[1d]) > 100
+        for: 0m
+        labels:
+          severity: warning
+          service: youtube-ai-cli
+        annotations:
+          summary: "High daily cost for YouTube AI operations"
+          description: "Daily cost is ${{ $value | printf \"%.2f\" }}"
+          runbook_url: "https://docs.youtube-ai-cli.com/runbooks/high-cost"
+
+      - alert: YouTubeAIUnusualCostSpike
+        expr: rate(youtube_ai_cost_usd_total[1h]) > 3 * rate(youtube_ai_cost_usd_total[6h] offset 1h)
+        for: 15m
+        labels:
+          severity: warning
+          service: youtube-ai-cli
+        annotations:
+          summary: "Unusual cost spike detected"
+          description: "Current hourly cost rate is 3x higher than historical average"
+          runbook_url: "https://docs.youtube-ai-cli.com/runbooks/cost-spike"
+
+      # Storage Alerts
+      - alert: YouTubeAILowDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/app/output"} / node_filesystem_size_bytes{mountpoint="/app/output"}) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: youtube-ai-cli
+        annotations:
+          summary: "Low disk space on output volume"
+          description: "Only {{ $value | humanizePercentage }} disk space remaining"
+          runbook_url: "https://docs.youtube-ai-cli.com/runbooks/low-disk-space"
+
+      # External Dependencies
+      - alert: YouTubeAIExternalAPIError
+        expr: rate(youtube_ai_external_api_errors_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          service: youtube-ai-cli
+        annotations:
+          summary: "High error rate from external APIs"
+          description: "External API error rate is {{ $value }} per second for {{ $labels.api_name }}"
+          runbook_url: "https://docs.youtube-ai-cli.com/runbooks/external-api-errors"
+
+  - name: youtube-ai-cli.aggregation
+    rules:
+      # Success Rate
+      - record: youtube_ai:success_rate
+        expr: |
+          (
+            rate(youtube_ai_requests_total{status="success"}[5m]) /
+            rate(youtube_ai_requests_total[5m])
+          )
+
+      # Error Rate by Operation
+      - record: youtube_ai:error_rate_by_operation
+        expr: |
+          (
+            rate(youtube_ai_errors_total[5m]) /
+            rate(youtube_ai_requests_total[5m])
+          ) by (operation)
+
+      # Average Response Time
+      - record: youtube_ai:avg_response_time
+        expr: |
+          rate(youtube_ai_request_duration_seconds_sum[5m]) /
+          rate(youtube_ai_request_duration_seconds_count[5m])
+
+      # Throughput
+      - record: youtube_ai:throughput
+        expr: rate(youtube_ai_requests_total[5m])
+
+      # Cost per Operation
+      - record: youtube_ai:cost_per_operation
+        expr: |
+          rate(youtube_ai_cost_usd_total[5m]) /
+          rate(youtube_ai_requests_total[5m])
+
+      # Active Users (based on unique sessions)
+      - record: youtube_ai:active_users
+        expr: count(count by (user_id)(youtube_ai_requests_total))
+
+      # Queue Depth
+      - record: youtube_ai:queue_depth
+        expr: youtube_ai_queue_size - youtube_ai_queue_processed
+
+      # Resource Utilization
+      - record: youtube_ai:memory_utilization
+        expr: |
+          (
+            container_memory_usage_bytes{container="youtube-ai-cli"} /
+            container_spec_memory_limit_bytes{container="youtube-ai-cli"}
+          )
+
+      - record: youtube_ai:cpu_utilization
+        expr: |
+          rate(container_cpu_usage_seconds_total{container="youtube-ai-cli"}[5m]) /
+          (container_spec_cpu_quota{container="youtube-ai-cli"} / container_spec_cpu_period{container="youtube-ai-cli"})
+
+  - name: youtube-ai-cli.slo
+    rules:
+      # Service Level Objectives (SLOs)
+      
+      # Availability SLO: 99.9% uptime
+      - record: youtube_ai:availability_slo
+        expr: |
+          (
+            1 - (
+              rate(youtube_ai_requests_total{status=~"5.."}[30d]) /
+              rate(youtube_ai_requests_total[30d])
+            )
+          )
+
+      # Latency SLO: 95% of requests under 10s
+      - record: youtube_ai:latency_slo
+        expr: |
+          histogram_quantile(0.95, rate(youtube_ai_request_duration_seconds_bucket[30d])) < 10
+
+      # Error Budget Burn Rate
+      - record: youtube_ai:error_budget_burn_rate
+        expr: |
+          (
+            rate(youtube_ai_requests_total{status=~"5.."}[1h]) /
+            rate(youtube_ai_requests_total[1h])
+          ) / (1 - 0.999)  # 99.9% availability target

@@ -1,0 +1,287 @@
+# Complete YouTube Automation Workflow Template
+# This workflow automates the entire process from topic to published video
+
+id: "complete_automation"
+name: "Complete YouTube Automation"
+description: "End-to-end automation from script generation to YouTube upload with SEO optimization"
+version: "1.0.0"
+tags: ["automation", "complete", "youtube", "ai"]
+created_at: "2024-01-01T00:00:00"
+
+# Default configuration for all workflow runs
+default_config:
+  # Content settings
+  style: "educational"
+  duration: 300
+  audience: "general"
+  language: "en"
+  
+  # AI provider settings
+  ai_provider: "openai"
+  tts_provider: "openai"
+  
+  # Video settings
+  video_style: "slideshow"
+  resolution: "1080p"
+  background_color: "#1a1a1a"
+  text_color: "#ffffff"
+  
+  # Audio settings
+  voice: "alloy"
+  speed: 1.0
+  
+  # Upload settings
+  privacy: "private"
+  category: "27"  # Education
+  
+  # Output settings
+  output_dir: "./output"
+  save_intermediate_files: true
+
+# Workflow steps in execution order
+steps:
+  # Step 1: Generate video script using AI
+  - id: "generate_script"
+    type: "generate_script"
+    name: "Generate Video Script"
+    config:
+      style: "{{ style }}"
+      duration: "{{ duration }}"
+      audience: "{{ audience }}"
+      ai_provider: "{{ ai_provider }}"
+      include_intro: true
+      include_outro: true
+    depends_on: []
+    max_retries: 2
+    timeout: 120
+    enabled: true
+
+  # Step 2: Optimize SEO metadata
+  - id: "optimize_seo"
+    type: "optimize_seo"
+    name: "Optimize SEO Metadata"
+    config:
+      ai_provider: "{{ ai_provider }}"
+      keywords: "{{ keywords | default([]) }}"
+      target_audience: "{{ audience }}"
+      include_trending_keywords: true
+    depends_on: ["generate_script"]
+    max_retries: 2
+    timeout: 60
+    enabled: true
+
+  # Step 3: Generate audio narration
+  - id: "generate_audio"
+    type: "generate_audio"
+    name: "Generate Audio Narration"
+    config:
+      tts_provider: "{{ tts_provider }}"
+      voice: "{{ voice }}"
+      speed: "{{ speed }}"
+      output_format: "mp3"
+      quality: "high"
+    depends_on: ["generate_script"]
+    max_retries: 2
+    timeout: 300
+    enabled: true
+
+  # Step 4: Generate thumbnail
+  - id: "generate_thumbnail"
+    type: "generate_thumbnail"
+    name: "Generate Video Thumbnail"
+    config:
+      style: "{{ thumbnail_style | default('educational') }}"
+      layout: "center_text"
+      ai_optimize: true
+      generate_variants: true
+      variant_count: 3
+    depends_on: ["optimize_seo"]
+    max_retries: 2
+    timeout: 120
+    enabled: true
+
+  # Step 5: Create video
+  - id: "generate_video"
+    type: "generate_video"
+    name: "Generate Video Content"
+    config:
+      style: "{{ video_style }}"
+      resolution: "{{ resolution }}"
+      background_color: "{{ background_color }}"
+      text_color: "{{ text_color }}"
+      include_intro_animation: true
+      include_outro_cta: true
+      fps: 30
+    depends_on: ["generate_script", "generate_audio"]
+    max_retries: 1
+    timeout: 600
+    enabled: true
+
+  # Step 6: Upload to YouTube (optional)
+  - id: "upload_video"
+    type: "upload_video"
+    name: "Upload to YouTube"
+    config:
+      privacy: "{{ privacy }}"
+      category: "{{ category }}"
+      made_for_kids: false
+      include_thumbnail: true
+      notify_subscribers: false
+      auto_chapters: true
+    depends_on: ["generate_video", "generate_thumbnail", "optimize_seo"]
+    max_retries: 3
+    timeout: 1200
+    enabled: false  # Disabled by default for safety
+
+# Conditional steps based on configuration
+conditional_steps:
+  # Only run if upload is enabled
+  - condition: "{{ upload_enabled | default(false) }}"
+    steps: ["upload_video"]
+  
+  # Only generate thumbnail variants if requested
+  - condition: "{{ generate_thumbnail_variants | default(false) }}"
+    modify_step: "generate_thumbnail"
+    config:
+      generate_variants: true
+      variant_count: 5
+
+# Quality checks and validations
+validations:
+  - step: "generate_script"
+    checks:
+      - min_word_count: 200
+      - max_word_count: 1000
+      - contains_call_to_action: true
+      - appropriate_language: true
+  
+  - step: "optimize_seo"
+    checks:
+      - title_length_valid: true
+      - description_length_valid: true
+      - tag_count_valid: true
+      - keyword_density_appropriate: true
+  
+  - step: "generate_video"
+    checks:
+      - min_duration: 60
+      - max_duration: 900
+      - audio_video_sync: true
+      - file_size_reasonable: true
+
+# Retry and error handling
+error_handling:
+  # Global retry settings
+  max_global_retries: 1
+  retry_delay: 30  # seconds
+  
+  # Step-specific error actions
+  step_errors:
+    generate_script:
+      action: "retry_with_different_prompt"
+      fallback: "use_template"
+    
+    generate_audio:
+      action: "retry_with_different_voice"
+      fallback: "use_text_only_video"
+    
+    upload_video:
+      action: "save_locally"
+      notify: true
+
+# Success notifications
+notifications:
+  on_completion:
+    - type: "console"
+      message: "Video automation completed successfully!"
+    
+    - type: "file"
+      path: "{{ output_dir }}/completion_log.txt"
+    
+    # Optional email notification (if configured)
+    - type: "email"
+      enabled: false
+      to: "{{ notification_email | default('') }}"
+      subject: "YouTube video ready: {{ title }}"
+
+  on_failure:
+    - type: "console"
+      message: "Workflow failed at step: {{ failed_step }}"
+    
+    - type: "file"
+      path: "{{ output_dir }}/error_log.txt"
+
+# Post-processing actions
+post_processing:
+  # Cleanup temporary files
+  cleanup:
+    - "*.tmp"
+    - "temp_*"
+    - "cache/*"
+  
+  # Archive successful runs
+  archive:
+    enabled: true
+    path: "{{ output_dir }}/archive/{{ execution_id }}"
+    include_logs: true
+  
+  # Generate report
+  report:
+    enabled: true
+    format: "json"
+    include_metrics: true
+    include_file_paths: true
+
+# Metrics and analytics
+metrics:
+  track:
+    - execution_time
+    - file_sizes
+    - ai_token_usage
+    - step_durations
+    - error_rates
+  
+  export:
+    - format: "csv"
+      path: "{{ output_dir }}/metrics.csv"
+    
+    - format: "json"
+      path: "{{ output_dir }}/metrics.json"
+
+# Resource limits
+resource_limits:
+  max_execution_time: 3600  # 1 hour
+  max_file_size: 2147483648  # 2GB
+  max_memory_usage: 4294967296  # 4GB
+  max_concurrent_steps: 2
+
+# Environment requirements
+requirements:
+  api_keys:
+    - "OPENAI_API_KEY"
+    - "ANTHROPIC_API_KEY"  # optional
+    - "ELEVENLABS_API_KEY"  # optional
+    - "YOUTUBE_API_KEY"  # required for upload
+  
+  software:
+    - "ffmpeg"  # for video processing
+    - "python>=3.9"
+  
+  disk_space: 5368709120  # 5GB minimum
+
+# Security settings
+security:
+  # Don't log sensitive information
+  redact_from_logs:
+    - "api_key"
+    - "password"
+    - "token"
+    - "secret"
+  
+  # File permissions
+  output_file_permissions: "644"
+  log_file_permissions: "600"
+  
+  # Validation
+  validate_inputs: true
+  sanitize_filenames: true

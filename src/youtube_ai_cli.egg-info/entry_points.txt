@@ -1,0 +1,3 @@
+[console_scripts]
+youtube-ai = youtube_ai.cli.main:main
+

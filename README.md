@@ -1,0 +1,157 @@
+# YouTube AI CLI
+
+🎬 **AI-powered YouTube automation CLI library** - Automate your entire YouTube content creation pipeline from ideation to publication using cutting-edge AI.
+
+## ✨ Features
+
+- 🤖 **AI Script Generation** - Create engaging video scripts using GPT-4, Claude, or local models
+- 🎯 **SEO Optimization** - Generate optimized titles, descriptions, and tags for maximum reach
+- 🎥 **Video Creation** - Automated video generation with AI-powered visuals and audio
+- 🎵 **Voice Synthesis** - High-quality text-to-speech with multiple voice options
+- 📊 **Analytics Integration** - Performance tracking and optimization suggestions
+- 🔄 **Workflow Automation** - Batch processing and scheduled content creation
+- 🛠️ **Multi-Provider Support** - Works with OpenAI, Anthropic, ElevenLabs, and more
+
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+# Install from source
+git clone https://github.com/yourusername/youtube-ai-cli.git
+cd youtube-ai-cli
+pip install -e .
+```
+
+### Initial Setup
+
+1. **Configure API Keys**
+   ```bash
+   youtube-ai config init
+   ```
+
+2. **Verify Configuration**
+   ```bash
+   youtube-ai config show
+   youtube-ai config validate
+   ```
+
+### Basic Usage
+
+```bash
+# Generate a video script
+youtube-ai generate script --topic "AI in 2025" --style educational --duration 300
+
+# Create optimized titles
+youtube-ai generate title --script my_script.txt --keywords "AI,technology,future"
+
+# Generate complete video metadata
+youtube-ai optimize seo --video-data script.txt --keywords "AI,automation"
+```
+
+## 🏗️ Project Structure
+
+```
+youtube-ai-cli/
+├── src/youtube_ai/           # Main package
+│   ├── core/                 # Core utilities
+│   │   ├── config.py        # Configuration management
+│   │   ├── logger.py        # Logging system
+│   │   └── exceptions.py    # Custom exceptions
+│   ├── ai/                  # AI service integrations
+│   │   ├── ai_manager.py    # AI provider management
+│   │   └── tts_client.py    # Text-to-speech services
+│   ├── content/             # Content generation
+│   │   ├── script_generator.py
+│   │   └── seo_optimizer.py
+│   ├── media/               # Media processing
+│   │   ├── video_generator.py
+│   │   └── thumbnail_generator.py
+│   ├── cli/                 # CLI interface
+│   │   └── main.py          # Main CLI entry point
+│   └── utils/               # Utility modules
+│       ├── youtube_uploader.py
+│       ├── workflow_manager.py
+│       └── analytics_tracker.py
+├── config/                  # Configuration templates
+├── tests/                   # Test suite
+├── docs/                    # Documentation
+│   └── examples/           # Usage examples
+├── requirements.txt         # Python dependencies
+└── setup.py                # Package setup
+```
+
+## 📦 Installation & Development
+
+### Setting up Development Environment
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/youtube-ai-cli.git
+cd youtube-ai-cli
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install in development mode
+pip install -e .
+
+# Install development dependencies
+pip install -e ".[dev]"
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=youtube_ai
+
+# Run specific test file
+pytest tests/test_script_generator.py
+```
+
+## ⚙️ Configuration
+
+### API Keys Required
+
+- **OpenAI API Key** - For GPT-4 script generation
+- **Anthropic API Key** - For Claude-based content creation (alternative)
+- **YouTube Data API Key** - For video upload and analytics
+- **ElevenLabs API Key** - For high-quality voice synthesis (optional)
+
+### Environment Variables
+
+```bash
+export YOUTUBE_API_KEY="your-youtube-api-key"
+export OPENAI_API_KEY="your-openai-key"
+export ANTHROPIC_API_KEY="your-anthropic-key"
+export ELEVENLABS_API_KEY="your-elevenlabs-key"
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](docs/contributing_guide.md) for details.
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- 📖 [Documentation](https://youtube-ai-cli.readthedocs.io)
+- 🐛 [Issue Tracker](https://github.com/yourusername/youtube-ai-cli/issues)
+- 💬 [Discussions](https://github.com/yourusername/youtube-ai-cli/discussions)
+
+---
+
+**Made with ❤️ for the YouTube creator community**

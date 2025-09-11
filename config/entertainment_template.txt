@@ -1,0 +1,99 @@
+# Entertainment Video Template
+# Use this template for creating engaging, entertaining content
+
+# Content Configuration
+content:
+  style: "entertaining"
+  target_audience: "general"
+  language: "en"
+  include_intro: true
+  include_outro: true
+  
+  # Entertainment-specific settings
+  pace: "fast"  # Keep energy high
+  humor_level: "moderate"  # light, moderate, heavy
+  include_hooks: true
+  include_cliffhangers: true
+  storytelling_format: "narrative"  # narrative, conversational, dramatic
+
+# Video Settings
+video:
+  resolution: "1080p"
+  fps: 30
+  format: "mp4"
+  style: "slideshow"
+  
+  # Visual settings for entertainment
+  background_color: "#1a1a1a"  # Dark background for dramatic effect
+  text_color: "#ffffff"        # White text for contrast
+  accent_color: "#ff6b35"      # Orange for energy
+  font_size: 52
+  
+  # Dynamic timing
+  intro_duration: 3
+  outro_duration: 7  # Longer outro for engagement
+  transition_duration: 0.5
+  
+  # Visual effects
+  use_animations: true
+  use_transitions: true
+  dynamic_text_size: true
+
+# Audio Settings
+audio:
+  voice: "nova"   # Energetic voice
+  speed: 1.1      # Slightly faster for entertainment
+  background_music: true
+  music_volume: 0.15  # Higher volume for entertainment
+  pause_between_sections: 0.5
+  
+  # Entertainment audio effects
+  use_sound_effects: true
+  emphasize_key_points: true
+
+# SEO Settings
+seo:
+  title_style: "clickable"  # More engaging titles
+  include_emotional_triggers: true
+  description_style: "engaging"
+  
+  # Entertainment keywords
+  default_keywords:
+    - "funny"
+    - "amazing"
+    - "incredible"
+    - "must watch"
+    - "entertaining"
+    - "viral"
+
+# YouTube Upload Settings
+youtube:
+  category: "24"  # Entertainment category
+  privacy: "public"
+  made_for_kids: false
+  
+  # Entertainment optimization
+  optimize_for_watch_time: true
+  include_end_screen: true
+  encourage_interaction: true
+
+# Workflow Settings
+workflow:
+  auto_generate_thumbnail: true
+  auto_optimize_seo: true
+  create_teaser_clips: true
+  optimize_for_mobile: true
+
+# Content Structure
+structure:
+  hook_duration: 15  # First 15 seconds crucial
+  main_content_segments: 3
+  climax_placement: "75%"  # Build to climax at 75% through
+  call_to_action_frequency: "high"
+
+# Engagement Features
+engagement:
+  include_questions: true
+  encourage_comments: true
+  include_polls: false  # Set to true if using community features
+  cross_promote: true

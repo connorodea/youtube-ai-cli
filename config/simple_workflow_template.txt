@@ -1,0 +1,86 @@
+# Simple Video Creation Workflow
+# Perfect for beginners - creates a basic video from topic to final output
+
+id: "simple_video"
+name: "Simple Video Creation"
+description: "Basic workflow to create a video from a topic with minimal configuration"
+version: "1.0.0"
+tags: ["simple", "beginner", "basic"]
+created_at: "2024-01-01T00:00:00"
+
+# Simple default configuration
+default_config:
+  style: "educational"
+  duration: 180  # 3 minutes
+  audience: "general"
+  video_style: "slideshow"
+  voice: "alloy"
+  privacy: "private"
+  output_dir: "./output"
+
+# Minimal steps for basic video creation
+steps:
+  # Step 1: Generate script
+  - id: "script"
+    type: "generate_script"
+    name: "Create Script"
+    config:
+      style: "{{ style }}"
+      duration: "{{ duration }}"
+      audience: "{{ audience }}"
+    depends_on: []
+    max_retries: 1
+    timeout: 90
+    enabled: true
+
+  # Step 2: Generate audio
+  - id: "audio"
+    type: "generate_audio"
+    name: "Create Audio"
+    config:
+      voice: "{{ voice }}"
+      speed: 1.0
+    depends_on: ["script"]
+    max_retries: 1
+    timeout: 180
+    enabled: true
+
+  # Step 3: Create video
+  - id: "video"
+    type: "generate_video"
+    name: "Create Video"
+    config:
+      style: "{{ video_style }}"
+    depends_on: ["script", "audio"]
+    max_retries: 1
+    timeout: 300
+    enabled: true
+
+# Simple error handling
+error_handling:
+  max_global_retries: 0
+  step_errors:
+    script:
+      action: "fail_gracefully"
+    audio:
+      action: "fail_gracefully"
+    video:
+      action: "fail_gracefully"
+
+# Basic notifications
+notifications:
+  on_completion:
+    - type: "console"
+      message: "✓ Simple video creation completed!"
+  
+  on_failure:
+    - type: "console"
+      message: "✗ Video creation failed"
+
+# No complex post-processing
+post_processing:
+  cleanup: []
+  archive:
+    enabled: false
+  report:
+    enabled: false
