@@ -912,7 +912,14 @@ def create_ai_video(script, voice, provider, style, num_visuals, image_provider,
 @click.option('--language', default='en', help='Content language')
 @click.option('--output-dir', help='Output directory for the complete video')
 @click.option('--auto-assemble', is_flag=True, help='Automatically assemble final video file')
-def create_auto_youtube(topic, duration, style, voice, image_provider, audience, language, output_dir, auto_assemble):
+@click.option('--custom-overlay', help='Custom overlay file name (from assets/overlays/)')
+@click.option('--custom-transition', help='Custom transition file name (from assets/transitions/)')
+@click.option('--transition-sound', help='Custom transition sound file name (from assets/sound_effects/)')
+@click.option('--background-music', help='Custom background music file name (from assets/background_music/)')
+@click.option('--overlay-opacity', default=0.3, help='Overlay opacity (0.0-1.0)')
+@click.option('--music-volume', default=0.2, help='Background music volume (0.0-1.0)')
+@click.option('--no-custom-assets', is_flag=True, help='Disable automatic custom asset detection')
+def create_auto_youtube(topic, duration, style, voice, image_provider, audience, language, output_dir, auto_assemble, custom_overlay, custom_transition, transition_sound, background_music, overlay_opacity, music_volume, no_custom_assets):
     """🚀 Create 100% automated YouTube video from just a topic - Zero manual work required!"""
     async def _create():
         try:
@@ -2326,6 +2333,42 @@ def batch_cancel(job_id):
             console.print(f"[red]Error cancelling batch job:[/red] {e}")
     
     asyncio.run(_cancel())
+
+
+@cli.command('list-assets')
+def list_custom_assets():
+    """📁 List all available custom assets (overlays, transitions, sounds, music)."""
+    try:
+        from youtube_ai.media.custom_assets import custom_assets_manager
+        custom_assets_manager.list_assets()
+    except Exception as e:
+        console.print(f"[red]Error listing assets:[/red] {e}")
+
+
+@cli.command('scan-assets')
+def scan_custom_assets():
+    """🔍 Scan and validate all custom assets in the assets directory."""
+    try:
+        from youtube_ai.media.custom_assets import custom_assets_manager
+        
+        console.print("[blue]🔍 Scanning custom assets...[/blue]")
+        assets = custom_assets_manager.scan_assets()
+        
+        total_assets = sum(len(asset_list) for asset_list in assets.values())
+        console.print(f"[green]✅ Found {total_assets} custom assets[/green]")
+        
+        # Create manifest
+        manifest = custom_assets_manager.create_asset_manifest()
+        manifest_file = Path("assets") / "manifest.json"
+        
+        import json
+        with open(manifest_file, 'w') as f:
+            json.dump(manifest, f, indent=2)
+        
+        console.print(f"[green]📋 Asset manifest created: {manifest_file}[/green]")
+        
+    except Exception as e:
+        console.print(f"[red]Error scanning assets:[/red] {e}")
 
 
 def main():
