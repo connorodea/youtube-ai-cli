@@ -17,8 +17,11 @@ class AIConfig(BaseModel):
     openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
     anthropic_api_key: Optional[str] = Field(default=None, description="Anthropic API key")
     elevenlabs_api_key: Optional[str] = Field(default=None, description="ElevenLabs API key")
+    deepgram_api_key: Optional[str] = Field(default=None, description="Deepgram API key")
+    stability_api_key: Optional[str] = Field(default=None, description="Stability AI API key")
     default_llm: str = Field(default="openai", description="Default LLM provider")
     default_tts: str = Field(default="openai", description="Default TTS provider")
+    default_image_provider: str = Field(default="openai", description="Default image generation provider")
 
 
 class VideoConfig(BaseModel):

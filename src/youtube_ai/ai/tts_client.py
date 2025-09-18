@@ -15,6 +15,13 @@ try:
 except ImportError:
     ELEVENLABS_AVAILABLE = False
 
+try:
+    # Temporarily disabled due to Python version compatibility
+    # from deepgram import DeepgramClient, SpeakOptions
+    DEEPGRAM_AVAILABLE = False
+except ImportError:
+    DEEPGRAM_AVAILABLE = False
+
 from youtube_ai.core.config import config_manager
 from youtube_ai.core.logger import get_logger
 
@@ -24,6 +31,7 @@ logger = get_logger(__name__)
 class TTSProvider(Enum):
     OPENAI = "openai"
     ELEVENLABS = "elevenlabs"
+    DEEPGRAM = "deepgram"
     LOCAL = "local"
 
 
@@ -214,6 +222,89 @@ class ElevenLabsTTSClient(BaseTTSClient):
         return True
 
 
+class DeepgramTTSClient(BaseTTSClient):
+    """Deepgram TTS client implementation."""
+    
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.client = DeepgramClient(api_key)
+        self.provider_name = "deepgram"
+        self._voices_cache = None
+    
+    async def synthesize_speech(self, request: TTSRequest) -> TTSResponse:
+        """Generate speech using Deepgram TTS."""
+        try:
+            # Set up Deepgram TTS options
+            options = SpeakOptions(
+                model="aura-asteria-en",  # High-quality voice model
+                encoding="mp3",
+                sample_rate=22050,
+            )
+            
+            # Override voice model if specified
+            voice_mapping = {
+                "asteria": "aura-asteria-en",
+                "luna": "aura-luna-en", 
+                "stella": "aura-stella-en",
+                "athena": "aura-athena-en",
+                "hera": "aura-hera-en",
+                "orion": "aura-orion-en",
+                "arcas": "aura-arcas-en",
+                "perseus": "aura-perseus-en",
+                "angus": "aura-angus-en",
+            }
+            
+            if request.voice in voice_mapping:
+                options.model = voice_mapping[request.voice]
+            
+            # Generate speech
+            response = self.client.speak.v("1").stream(
+                source={"text": request.text},
+                options=options
+            )
+            
+            # Get audio bytes
+            audio_data = b"".join(response)
+            
+            return TTSResponse(
+                audio_data=audio_data,
+                provider="deepgram",
+                voice=request.voice,
+                format=request.output_format,
+                sample_rate=request.sample_rate,
+                duration=len(request.text.split()) * 0.5,  # Rough estimate
+                metadata={
+                    "model": options.model,
+                    "input_length": len(request.text)
+                }
+            )
+            
+        except Exception as e:
+            logger.error(f"Deepgram TTS error: {e}")
+            raise
+    
+    async def get_available_voices(self) -> List[Voice]:
+        """Get available Deepgram voices."""
+        if self._voices_cache is None:
+            self._voices_cache = [
+                Voice(id="asteria", name="Asteria", provider="deepgram", gender="female", style="conversational"),
+                Voice(id="luna", name="Luna", provider="deepgram", gender="female", style="expressive"),
+                Voice(id="stella", name="Stella", provider="deepgram", gender="female", style="friendly"),
+                Voice(id="athena", name="Athena", provider="deepgram", gender="female", style="authoritative"),
+                Voice(id="hera", name="Hera", provider="deepgram", gender="female", style="warm"),
+                Voice(id="orion", name="Orion", provider="deepgram", gender="male", style="deep"),
+                Voice(id="arcas", name="Arcas", provider="deepgram", gender="male", style="calm"),
+                Voice(id="perseus", name="Perseus", provider="deepgram", gender="male", style="confident"),
+                Voice(id="angus", name="Angus", provider="deepgram", gender="male", style="narrative"),
+            ]
+        return self._voices_cache
+    
+    def validate_voice(self, voice_id: str) -> bool:
+        """Validate Deepgram voice ID."""
+        valid_voices = ["asteria", "luna", "stella", "athena", "hera", "orion", "arcas", "perseus", "angus"]
+        return voice_id in valid_voices
+
+
 class TTSManager:
     """Manages multiple TTS providers with fallback support."""
     
@@ -240,6 +331,16 @@ class TTSManager:
                 logger.debug("Initialized ElevenLabs TTS client")
             except ImportError as e:
                 logger.warning(f"ElevenLabs not available: {e}")
+        
+        # Deepgram TTS
+        if hasattr(self.config.ai, 'deepgram_api_key') and self.config.ai.deepgram_api_key and DEEPGRAM_AVAILABLE:
+            try:
+                self.clients["deepgram"] = DeepgramTTSClient(
+                    api_key=self.config.ai.deepgram_api_key
+                )
+                logger.debug("Initialized Deepgram TTS client")
+            except Exception as e:
+                logger.warning(f"Deepgram not available: {e}")
         
         if not self.clients:
             logger.warning("No TTS providers configured")

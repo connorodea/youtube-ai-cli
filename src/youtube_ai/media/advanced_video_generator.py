@@ -29,21 +29,31 @@ except ImportError:
     pass
 
 try:
-    # Direct imports since moviepy.editor is missing
-    from moviepy.video.io.VideoFileClip import VideoFileClip
-    from moviepy.audio.io.AudioFileClip import AudioFileClip
-    from moviepy.video.io.ImageSequenceClip import ImageSequenceClip
-    from moviepy.video.VideoClip import VideoClip, ColorClip, TextClip
-    from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
-    from moviepy.audio.AudioClip import CompositeAudioClip
-    from moviepy.video.tools.cuts import concatenate_videoclips
-    from moviepy.video.fx.Resize import resize
-    from moviepy.video.fx.FadeIn import fadein
-    from moviepy.video.fx.FadeOut import fadeout
+    # MoviePy 2.x imports
+    from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
+    from moviepy import concatenate_videoclips, TextClip, ColorClip, CompositeAudioClip, VideoClip
     MOVIEPY_AVAILABLE = True
-except ImportError as e:
-    print(f"MoviePy import error: {e}")
-    MOVIEPY_AVAILABLE = False
+except ImportError:
+    try:
+        # MoviePy 1.x fallback imports  
+        from moviepy.editor import (
+            VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip,
+            concatenate_videoclips, TextClip, ColorClip, CompositeAudioClip, VideoClip
+        )
+        MOVIEPY_AVAILABLE = True
+    except ImportError:
+        try:
+            # Direct imports for older versions
+            from moviepy.video.io.VideoFileClip import VideoFileClip
+            from moviepy.audio.io.AudioFileClip import AudioFileClip
+            from moviepy.video.VideoClip import VideoClip, ColorClip, TextClip
+            from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
+            from moviepy.audio.AudioClip import CompositeAudioClip
+            from moviepy.video.tools.cuts import concatenate_videoclips
+            MOVIEPY_AVAILABLE = True
+        except ImportError as e:
+            print(f"MoviePy import error: {e}")
+            MOVIEPY_AVAILABLE = False
 
 try:
     import librosa
@@ -207,14 +217,14 @@ class AdvancedVideoGenerator:
                 }
             },
             "educational": {
-                "color_grade": {"contrast": 1.0, "brightness": 1.1, "saturation": 1.0},
-                "effects": [],
-                "transition_duration": 0.3,
+                "color_grade": {"contrast": 1.15, "brightness": 1.05, "saturation": 1.1, "warmth": 1.02},
+                "effects": [EffectType.COLOR_GRADE],
+                "transition_duration": 0.8,
                 "subtitle_style": {
                     "fontsize": 44,
                     "color": "white",
                     "font": "Arial-Bold",
-                    "stroke_color": "blue",
+                    "stroke_color": "navy",
                     "stroke_width": 2
                 }
             },
@@ -661,8 +671,9 @@ class AdvancedVideoGenerator:
     async def _create_image_clip(self, asset: MediaAsset, duration: float, resolution: Tuple[int, int]):
         """Create a video clip from an image with proper scaling."""
         clip = ImageClip(str(asset.file_path))
-        clip = clip.set_duration(duration)
+        # MoviePy 2.x compatibility: use duration parameter in resize call
         clip = clip.resize(resolution)
+        clip = clip.with_duration(duration) if hasattr(clip, 'with_duration') else clip.set_duration(duration)
         return clip
     
     async def _create_video_clip(self, asset: MediaAsset, max_duration: float):
@@ -757,13 +768,15 @@ class AdvancedVideoGenerator:
         return clip.fl(make_frame)
     
     def _apply_color_grade(self, clip, color_grade: Dict[str, float]):
-        """Apply color grading to a clip."""
+        """Apply professional color grading to a clip."""
         contrast = color_grade.get("contrast", 1.0)
         brightness = color_grade.get("brightness", 1.0)
         saturation = color_grade.get("saturation", 1.0)
+        warmth = color_grade.get("warmth", 1.0)
         
         def make_frame(get_frame, t):
             frame = get_frame(t)
+            frame = frame.astype(np.float32)
             
             # Apply brightness
             frame = frame * brightness
@@ -771,29 +784,127 @@ class AdvancedVideoGenerator:
             # Apply contrast
             frame = (frame - 128) * contrast + 128
             
-            # Apply saturation (simplified)
+            # Apply saturation
             if saturation != 1.0:
                 gray = np.dot(frame[...,:3], [0.299, 0.587, 0.114])
                 frame = gray[..., np.newaxis] * (1 - saturation) + frame * saturation
+            
+            # Apply warmth (color temperature adjustment)
+            if warmth != 1.0:
+                # Increase red/yellow tones for warmth > 1.0, blue tones for < 1.0
+                if warmth > 1.0:
+                    frame[..., 0] = frame[..., 0] * warmth  # Red channel
+                    frame[..., 1] = frame[..., 1] * (1 + (warmth - 1) * 0.5)  # Green channel
+                else:
+                    frame[..., 2] = frame[..., 2] * (2 - warmth)  # Blue channel
+            
+            # Professional color enhancement
+            # Slight increase in mid-tone contrast
+            frame = self._enhance_midtones(frame)
             
             return np.clip(frame, 0, 255).astype(np.uint8)
         
         return clip.fl(make_frame)
     
+    def _enhance_midtones(self, frame):
+        """Enhance midtones for a more professional look."""
+        # Apply subtle S-curve for better contrast in midtones
+        normalized = frame / 255.0
+        enhanced = np.where(
+            normalized < 0.5,
+            2 * normalized ** 2,
+            1 - 2 * (1 - normalized) ** 2
+        )
+        return enhanced * 255
+    
     def _apply_transitions(self, clip, transition_in: TransitionType, transition_out: TransitionType):
-        """Apply transition effects to a clip."""
-        transition_duration = 0.5
+        """Apply professional transition effects to a clip."""
+        transition_duration = 0.8  # Longer, smoother transitions
         
         if transition_in == TransitionType.FADE:
             clip = clip.fadein(transition_duration)
         elif transition_in == TransitionType.CROSSFADE:
             clip = clip.crossfadein(transition_duration)
+        elif transition_in == TransitionType.SLIDE_LEFT:
+            clip = self._apply_slide_transition(clip, 'in', 'left', transition_duration)
+        elif transition_in == TransitionType.ZOOM_IN:
+            clip = self._apply_zoom_transition(clip, 'in', transition_duration)
         
         if transition_out == TransitionType.FADE:
             clip = clip.fadeout(transition_duration)
         elif transition_out == TransitionType.CROSSFADE:
             clip = clip.crossfadeout(transition_duration)
+        elif transition_out == TransitionType.SLIDE_RIGHT:
+            clip = self._apply_slide_transition(clip, 'out', 'right', transition_duration)
+        elif transition_out == TransitionType.ZOOM_OUT:
+            clip = self._apply_zoom_transition(clip, 'out', transition_duration)
         
+        return clip
+    
+    def _apply_slide_transition(self, clip, direction: str, side: str, duration: float):
+        """Apply smooth slide transition effect."""
+        def slide_effect(get_frame, t):
+            frame = get_frame(t)
+            h, w = frame.shape[:2]
+            
+            if direction == 'in':
+                # Slide in from side
+                progress = min(t / duration, 1.0)
+                if side == 'left':
+                    offset = int((1 - progress) * w)
+                    new_frame = np.zeros_like(frame)
+                    new_frame[:, offset:] = frame[:, :w-offset]
+                else:  # right
+                    offset = int((1 - progress) * w)
+                    new_frame = np.zeros_like(frame)
+                    new_frame[:, :w-offset] = frame[:, offset:]
+            else:  # out
+                # Slide out to side
+                progress = min((clip.duration - t) / duration, 1.0)
+                if side == 'right':
+                    offset = int((1 - progress) * w)
+                    new_frame = np.zeros_like(frame)
+                    new_frame[:, :w-offset] = frame[:, offset:]
+                else:  # left
+                    offset = int((1 - progress) * w)
+                    new_frame = np.zeros_like(frame)
+                    new_frame[:, offset:] = frame[:, :w-offset]
+            
+            return new_frame if 'new_frame' in locals() else frame
+        
+        if direction == 'in' and clip.duration > duration:
+            return clip.fl(slide_effect)
+        elif direction == 'out' and clip.duration > duration:
+            return clip.fl(slide_effect)
+        return clip
+    
+    def _apply_zoom_transition(self, clip, direction: str, duration: float):
+        """Apply smooth zoom transition effect."""
+        def zoom_effect(get_frame, t):
+            frame = get_frame(t)
+            
+            if direction == 'in':
+                # Zoom in from small
+                progress = min(t / duration, 1.0)
+                scale = 0.5 + 0.5 * progress  # Start at 50%, end at 100%
+            else:  # out
+                # Zoom out to small
+                progress = min((clip.duration - t) / duration, 1.0)
+                scale = 0.5 + 0.5 * progress  # End at 50%
+            
+            if scale != 1.0:
+                h, w = frame.shape[:2]
+                new_h, new_w = int(h * scale), int(w * scale)
+                if new_h > 0 and new_w > 0:
+                    # Simple scaling (MoviePy will handle this better)
+                    pass
+            
+            return frame
+        
+        if direction == 'in' and clip.duration > duration:
+            return clip.resize(lambda t: 0.5 + 0.5 * min(t / duration, 1.0))
+        elif direction == 'out' and clip.duration > duration:
+            return clip.resize(lambda t: 0.5 + 0.5 * min((clip.duration - t) / duration, 1.0))
         return clip
     
     def _add_subtitles(self, video_clip, subtitle_segments: List[SubtitleSegment], style: Dict[str, Any]):

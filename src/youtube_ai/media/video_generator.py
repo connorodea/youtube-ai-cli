@@ -9,13 +9,20 @@ from enum import Enum
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 try:
-    from moviepy.editor import (
-        VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip,
-        concatenate_videoclips, TextClip, ColorClip
-    )
+    # MoviePy 2.x imports
+    from moviepy import VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip
+    from moviepy import concatenate_videoclips, TextClip, ColorClip, CompositeAudioClip
     MOVIEPY_AVAILABLE = True
 except ImportError:
-    MOVIEPY_AVAILABLE = False
+    try:
+        # MoviePy 1.x fallback imports  
+        from moviepy.editor import (
+            VideoFileClip, AudioFileClip, ImageClip, CompositeVideoClip,
+            concatenate_videoclips, TextClip, ColorClip, CompositeAudioClip
+        )
+        MOVIEPY_AVAILABLE = True
+    except ImportError:
+        MOVIEPY_AVAILABLE = False
 
 from youtube_ai.core.config import config_manager
 from youtube_ai.core.logger import get_logger

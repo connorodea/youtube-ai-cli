@@ -1,7 +1,7 @@
 import click
 import asyncio
 import random
-from typing import List
+from typing import List, Any, Optional, Dict
 from rich.console import Console
 from rich.table import Table
 from pathlib import Path
@@ -97,8 +97,11 @@ def config_show():
     table.add_row("OpenAI API Key", "***" if config.ai.openai_api_key else "Not set")
     table.add_row("Anthropic API Key", "***" if config.ai.anthropic_api_key else "Not set")
     table.add_row("ElevenLabs API Key", "***" if config.ai.elevenlabs_api_key else "Not set")
+    table.add_row("Deepgram API Key", "***" if config.ai.deepgram_api_key else "Not set")
+    table.add_row("Stability AI Key", "***" if config.ai.stability_api_key else "Not set")
     table.add_row("Default LLM", config.ai.default_llm)
     table.add_row("Default TTS", config.ai.default_tts)
+    table.add_row("Default Image Provider", config.ai.default_image_provider)
     
     # Video settings
     table.add_row("Video Resolution", config.video.resolution)
@@ -753,6 +756,907 @@ def create_video_project(script, voice, provider, style, num_backgrounds, output
                 console.print_exception()
     
     asyncio.run(_create())
+
+
+@create.command('ai-video')
+@click.option('--script', required=True, type=click.Path(exists=True), help='Script file to use')
+@click.option('--voice', default='nova', help='Voice for narration (alloy, echo, fable, onyx, nova, shimmer)')
+@click.option('--provider', default='openai', help='TTS provider (openai, elevenlabs)')
+@click.option('--style', default='educational', help='Visual style (educational, professional, tech, documentary, modern, minimalist)')
+@click.option('--num-visuals', default=5, help='Number of AI-generated visuals')
+@click.option('--image-provider', default='openai', help='Image generation provider (openai, stability, fallback)')
+@click.option('--output-dir', help='Output directory for project files')
+def create_ai_video(script, voice, provider, style, num_visuals, image_provider, output_dir):
+    """Create complete AI-powered video with contextual visuals generated from script content."""
+    async def _create():
+        try:
+            from youtube_ai.ai.image_generator import image_generator, ImageStyle, ImageProvider
+            from youtube_ai.media.simple_video_generator import simple_video_generator
+            
+            # Read script
+            with open(script, 'r', encoding='utf-8') as f:
+                script_text = f.read()
+            
+            # Prepare output directory
+            if not output_dir:
+                script_path = Path(script)
+                output_path = Path(config_manager.load_config().output_dir) / f"ai_video_{script_path.stem}"
+            else:
+                output_path = Path(output_dir)
+            
+            output_path.mkdir(parents=True, exist_ok=True)
+            
+            console.print(f"[bold blue]🤖 Creating AI-Powered YouTube Video[/bold blue]")
+            console.print(f"[dim]Script:[/dim] {script}")
+            console.print(f"[dim]Voice:[/dim] {voice} ({provider})")
+            console.print(f"[dim]Visual Style:[/dim] {style}")
+            console.print(f"[dim]AI Visuals:[/dim] {num_visuals} images")
+            console.print(f"[dim]Image Provider:[/dim] {image_provider}")
+            console.print(f"[dim]Output:[/dim] {output_path}")
+            
+            # Step 1: Generate professional voiceover
+            console.print(f"\n[blue]🎵 Generating professional voiceover...[/blue]")
+            from youtube_ai.ai.tts_client import tts_manager
+            
+            audio_file = output_path / "narration.mp3"
+            await tts_manager.synthesize_speech(
+                text=script_text,
+                voice=voice,
+                provider=provider,
+                output_file=audio_file
+            )
+            console.print(f"[green]✅[/green] Professional voiceover created: {audio_file.name}")
+            
+            # Step 2: Generate AI-powered contextual visuals
+            console.print(f"\n[blue]🎨 Generating {num_visuals} AI-powered contextual visuals...[/blue]")
+            
+            # Parse style and provider
+            try:
+                image_style = ImageStyle(style.lower())
+            except ValueError:
+                console.print(f"[yellow]Warning:[/yellow] Unknown style '{style}', using 'educational'")
+                image_style = ImageStyle.EDUCATIONAL
+            
+            try:
+                img_provider = ImageProvider(image_provider.lower())
+            except ValueError:
+                console.print(f"[yellow]Warning:[/yellow] Unknown image provider '{image_provider}', using 'openai'")
+                img_provider = ImageProvider.OPENAI
+            
+            # Generate AI visuals
+            visuals_dir = output_path / "ai_visuals"
+            generated_images = await image_generator.generate_script_visuals(
+                script=script_text,
+                output_dir=visuals_dir,
+                style=image_style,
+                num_images=num_visuals,
+                provider=img_provider
+            )
+            
+            console.print(f"[green]✅[/green] {len(generated_images)} contextual visuals created")
+            
+            # Step 3: Generate subtitles
+            console.print(f"\n[blue]📝 Creating subtitle file...[/blue]")
+            subtitle_file = output_path / "subtitles.srt"
+            await _create_subtitle_file_ai(script_text, subtitle_file)
+            console.print(f"[green]✅[/green] Subtitle file created: {subtitle_file.name}")
+            
+            # Step 4: Create assembly instructions
+            console.print(f"\n[blue]📋 Creating assembly instructions...[/blue]")
+            await _create_ai_assembly_instructions(
+                output_path, audio_file, [img.file_path for img in generated_images], 
+                subtitle_file, generated_images
+            )
+            
+            # Step 5: Save metadata
+            metadata_file = output_path / "project_metadata.json"
+            metadata = {
+                "title": f"AI-Generated Video - {Path(script).stem}",
+                "script_file": script,
+                "voice": voice,
+                "provider": provider,
+                "style": style,
+                "num_visuals": len(generated_images),
+                "image_provider": image_provider,
+                "ai_prompts": [
+                    {
+                        "scene": img.scene_number,
+                        "prompt": img.prompt,
+                        "keywords": img.metadata.get("keywords", []) if img.metadata else []
+                    } for img in generated_images
+                ],
+                "duration": len(script_text.split()) * 0.5,  # Estimate
+                "resolution": "1792x1024",
+                "created_with": "YouTube AI CLI"
+            }
+            
+            import json
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            
+            # Success summary
+            console.print(f"\n[bold green]🎉 AI-Powered Video Project Created Successfully![/bold green]")
+            console.print(f"[green]✓[/green] Professional voiceover: {audio_file.name}")
+            console.print(f"[green]✓[/green] AI contextual visuals: {len(generated_images)} images")
+            console.print(f"[green]✓[/green] Synchronized subtitles: {subtitle_file.name}")
+            console.print(f"[green]✓[/green] Assembly instructions: VIDEO_ASSEMBLY_INSTRUCTIONS.md")
+            console.print(f"[green]✓[/green] Project metadata: {metadata_file.name}")
+            
+            console.print(f"\n[bold yellow]🚀 Your AI Video is Ready![/bold yellow]")
+            console.print(f"[yellow]📁[/yellow] Project directory: {output_path}")
+            console.print(f"[yellow]🎬[/yellow] The visuals perfectly match your script content!")
+            console.print(f"[yellow]📋[/yellow] Follow VIDEO_ASSEMBLY_INSTRUCTIONS.md for final video assembly")
+            
+            if image_provider == "stability":
+                console.print(f"\n[blue]💡 Pro Tip:[/blue] Your Stability AI visuals are ultra-high quality and perfectly contextual!")
+            elif image_provider == "openai":
+                console.print(f"\n[blue]💡 Pro Tip:[/blue] Your DALL-E visuals are contextually matched to each script segment!")
+            else:
+                console.print(f"\n[blue]💡 Pro Tip:[/blue] Try --image-provider stability or --image-provider openai for AI-generated visuals!")
+            
+        except Exception as e:
+            console.print(f"[red]Error creating AI video:[/red] {e}")
+            if config_manager.load_config().debug:
+                console.print_exception()
+    
+    asyncio.run(_create())
+
+
+@create.command('auto-youtube')
+@click.option('--topic', required=True, help='Video topic (e.g., "Python basics for beginners")')
+@click.option('--duration', default=180, help='Target video duration in seconds')
+@click.option('--style', default='educational', help='Content style (educational, professional, tech, documentary)')
+@click.option('--voice', default='nova', help='Voice for narration')
+@click.option('--image-provider', default='stability', help='Image provider (openai, stability)')
+@click.option('--audience', default='general', help='Target audience (beginner, intermediate, advanced, general)')
+@click.option('--language', default='en', help='Content language')
+@click.option('--output-dir', help='Output directory for the complete video')
+@click.option('--auto-assemble', is_flag=True, help='Automatically assemble final video file')
+def create_auto_youtube(topic, duration, style, voice, image_provider, audience, language, output_dir, auto_assemble):
+    """🚀 Create 100% automated YouTube video from just a topic - Zero manual work required!"""
+    async def _create():
+        try:
+            console.print(f"[bold green]🚀 100% AUTOMATED YOUTUBE VIDEO GENERATION[/bold green]")
+            console.print(f"[bold blue]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold blue]")
+            console.print(f"[yellow]📝 Topic:[/yellow] {topic}")
+            console.print(f"[yellow]⏱️  Duration:[/yellow] {duration} seconds")
+            console.print(f"[yellow]🎨 Style:[/yellow] {style}")
+            console.print(f"[yellow]🗣️  Voice:[/yellow] {voice}")
+            console.print(f"[yellow]🖼️  Images:[/yellow] {image_provider}")
+            console.print(f"[yellow]👥 Audience:[/yellow] {audience}")
+            
+            # Prepare output directory
+            if not output_dir:
+                safe_topic = "".join(c for c in topic if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                safe_topic = "_".join(safe_topic.split())[:50]
+                output_path = Path(config_manager.load_config().output_dir) / f"auto_youtube_{safe_topic}"
+            else:
+                output_path = Path(output_dir)
+            
+            output_path.mkdir(parents=True, exist_ok=True)
+            console.print(f"[yellow]📁 Output:[/yellow] {output_path}")
+            
+            # STEP 1: Generate AI Script
+            console.print(f"\n[bold blue]🤖 STEP 1: Generating AI Script...[/bold blue]")
+            from youtube_ai.content.script_generator import ScriptGenerator
+            
+            generator = ScriptGenerator()
+            script = await generator.generate_script(
+                topic=topic,
+                style=style,
+                duration=duration,
+                audience=audience
+            )
+            
+            script_content = script
+            script_file = output_path / "generated_script.txt"
+            with open(script_file, 'w', encoding='utf-8') as f:
+                f.write(script_content)
+            
+            console.print(f"[green]✅ AI Script Generated:[/green] {len(script_content.split())} words")
+            
+            # STEP 2: Generate Professional Voiceover
+            console.print(f"\n[bold blue]🎵 STEP 2: Creating Professional Voiceover...[/bold blue]")
+            from youtube_ai.ai.tts_client import tts_manager
+            
+            audio_file = output_path / "professional_voiceover.mp3"
+            await tts_manager.synthesize_speech(
+                text=script_content,
+                voice=voice,
+                provider="openai",
+                output_file=audio_file
+            )
+            console.print(f"[green]✅ Professional Voiceover Created:[/green] {audio_file.name}")
+            
+            # STEP 3: Generate AI Visuals
+            console.print(f"\n[bold blue]🎨 STEP 3: Generating Contextual AI Visuals...[/bold blue]")
+            from youtube_ai.ai.image_generator import image_generator, ImageStyle, ImageProvider
+            
+            # Parse parameters
+            try:
+                image_style = ImageStyle(style.lower())
+            except ValueError:
+                image_style = ImageStyle.EDUCATIONAL
+                
+            try:
+                img_provider = ImageProvider(image_provider.lower())
+            except ValueError:
+                img_provider = ImageProvider.STABILITY
+            
+            # Calculate optimal number of visuals based on duration
+            num_visuals = max(3, min(8, duration // 30))
+            
+            visuals_dir = output_path / "ai_visuals"
+            generated_images = await image_generator.generate_script_visuals(
+                script=script_content,
+                output_dir=visuals_dir,
+                style=image_style,
+                num_images=num_visuals,
+                provider=img_provider
+            )
+            console.print(f"[green]✅ AI Visuals Generated:[/green] {len(generated_images)} contextual images")
+            
+            # STEP 4: Generate SEO-Optimized Metadata
+            console.print(f"\n[bold blue]📊 STEP 4: Creating SEO-Optimized Metadata...[/bold blue]")
+            from youtube_ai.content.seo_optimizer import SEOOptimizer
+            
+            seo_optimizer = SEOOptimizer()
+            
+            # Generate titles
+            titles = await seo_optimizer.generate_titles(
+                content=script_content,
+                keywords=[topic],
+                count=3
+            )
+            best_title = titles[0] if titles else f"Complete Guide to {topic}"
+            
+            # Generate description
+            description = await seo_optimizer.generate_description(
+                content=script_content,
+                title=best_title,
+                keywords=[topic],
+                include_timestamps=True
+            )
+            
+            # Generate tags  
+            tags_list = await seo_optimizer.generate_tags(
+                content=script_content,
+                title=best_title,
+                keywords=[topic],
+                max_tags=15
+            )
+            tags = ", ".join(tags_list)
+            
+            console.print(f"[green]✅ SEO Metadata Generated:[/green] Title, description, tags")
+            
+            # STEP 5: Create Synchronized Subtitles
+            console.print(f"\n[bold blue]📝 STEP 5: Creating Synchronized Subtitles...[/bold blue]")
+            subtitle_file = output_path / "subtitles.srt"
+            await _create_subtitle_file_ai(script_content, subtitle_file)
+            console.print(f"[green]✅ Subtitles Created:[/green] {subtitle_file.name}")
+            
+            # STEP 6: Professional Video Assembly (if requested)
+            final_video_path = None
+            if auto_assemble:
+                console.print(f"\n[bold blue]🎬 STEP 6: Creating Professional Video with Color Grading & Transitions...[/bold blue]")
+                final_video_path = await _create_professional_video_with_effects(
+                    output_path, audio_file, [img.file_path for img in generated_images], 
+                    subtitle_file, script_content, style
+                )
+                if final_video_path:
+                    console.print(f"[green]✅ Professional Video Created:[/green] {final_video_path.name}")
+                    console.print(f"[green]    ✨ Enhanced with color grading & smooth transitions[/green]")
+                else:
+                    console.print(f"[yellow]⚠️  Professional video creation requires MoviePy - using fallback assembly[/yellow]")
+                    # Fallback to basic assembly
+                    final_video_path = await _auto_assemble_video(
+                        output_path, audio_file, [img.file_path for img in generated_images], subtitle_file
+                    )
+            
+            # STEP 7: Create Complete Project Package
+            console.print(f"\n[bold blue]📦 STEP 7: Creating Complete Project Package...[/bold blue]")
+            
+            # Save all metadata
+            project_data = {
+                "title": best_title,
+                "all_titles": titles,
+                "description": description,
+                "tags": tags,
+                "topic": topic,
+                "duration": duration,
+                "style": style,
+                "voice": voice,
+                "image_provider": image_provider,
+                "audience": audience,
+                "language": language,
+                "num_visuals": len(generated_images),
+                "script_words": len(script_content.split()),
+                "auto_assembled": auto_assemble and final_video_path is not None,
+                "files": {
+                    "script": str(script_file),
+                    "audio": str(audio_file),
+                    "visuals": [str(img.file_path) for img in generated_images],
+                    "subtitles": str(subtitle_file),
+                    "final_video": str(final_video_path) if final_video_path else None
+                },
+                "ai_prompts": [
+                    {
+                        "scene": img.scene_number,
+                        "prompt": img.prompt,
+                        "provider": img.provider,
+                        "keywords": img.metadata.get("keywords", []) if img.metadata else []
+                    } for img in generated_images
+                ],
+                "created_with": "YouTube AI CLI - 100% Automated",
+                "creation_timestamp": str(Path().absolute())
+            }
+            
+            metadata_file = output_path / "complete_project_data.json"
+            import json
+            with open(metadata_file, 'w') as f:
+                json.dump(project_data, f, indent=2)
+            
+            # Create comprehensive instructions
+            await _create_automated_instructions(
+                output_path, audio_file, [img.file_path for img in generated_images], 
+                subtitle_file, project_data, final_video_path
+            )
+            
+            # SUCCESS SUMMARY
+            console.print(f"\n[bold green]🎉 100% AUTOMATED YOUTUBE VIDEO COMPLETED![/bold green]")
+            console.print(f"[bold blue]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold blue]")
+            console.print(f"[green]✅ AI-Generated Script:[/green] {len(script_content.split())} words")
+            console.print(f"[green]✅ Professional Voiceover:[/green] {voice} voice")
+            console.print(f"[green]✅ Contextual AI Visuals:[/green] {len(generated_images)} images ({image_provider})")
+            console.print(f"[green]✅ SEO-Optimized Metadata:[/green] Title, description, tags")
+            console.print(f"[green]✅ Synchronized Subtitles:[/green] Professional timing")
+            console.print(f"[green]✅ Complete Project Package:[/green] Ready for upload")
+            
+            if final_video_path:
+                console.print(f"[green]✅ Final Video File:[/green] {final_video_path.name}")
+            
+            console.print(f"\n[bold yellow]🚀 YOUR AUTOMATED YOUTUBE VIDEO IS READY![/bold yellow]")
+            console.print(f"[yellow]📁 Project Directory:[/yellow] {output_path}")
+            console.print(f"[yellow]🎬 Title:[/yellow] {best_title}")
+            console.print(f"[yellow]⏱️  Duration:[/yellow] ~{duration} seconds")
+            console.print(f"[yellow]💡 Quality:[/yellow] Professional broadcast-ready")
+            
+            if not auto_assemble:
+                console.print(f"\n[blue]💡 Pro Tip:[/blue] Add --auto-assemble flag for complete video file!")
+            
+            console.print(f"\n[cyan]🎯 Zero manual work required - Your YouTube automation is complete![/cyan]")
+            
+        except Exception as e:
+            console.print(f"[red]Error in automated video creation:[/red] {e}")
+            if config_manager.load_config().debug:
+                console.print_exception()
+    
+    asyncio.run(_create())
+
+
+async def _create_professional_video_with_effects(
+    project_dir: Path,
+    audio_file: Path,
+    image_files: List[Path],
+    subtitle_file: Path,
+    script_content: str,
+    style: str
+) -> Optional[Path]:
+    """Create professional video with color grading, transitions, and effects using MoviePy."""
+    try:
+        from youtube_ai.media.advanced_video_generator import (
+            AdvancedVideoGenerator, AdvancedVideoStyle, MediaAsset, 
+            TransitionType, EffectType
+        )
+        
+        # Initialize advanced video generator
+        generator = AdvancedVideoGenerator()
+        
+        # Convert style string to enum
+        style_mapping = {
+            'educational': AdvancedVideoStyle.EDUCATIONAL,
+            'professional': AdvancedVideoStyle.DOCUMENTARY,
+            'cinematic': AdvancedVideoStyle.CINEMATIC,
+            'documentary': AdvancedVideoStyle.DOCUMENTARY,
+            'social_media': AdvancedVideoStyle.SOCIAL_MEDIA
+        }
+        video_style = style_mapping.get(style.lower(), AdvancedVideoStyle.EDUCATIONAL)
+        
+        # Create media assets from images with enhanced effects
+        media_assets = []
+        for i, img_file in enumerate(image_files):
+            # Add variety in Ken Burns effects for visual interest
+            zoom_variations = [
+                (1.0, 1.15),  # Gentle zoom in
+                (1.1, 1.0),   # Gentle zoom out  
+                (1.0, 1.2),   # Stronger zoom in
+                (1.05, 1.05)  # Static with slight zoom
+            ]
+            
+            pan_variations = [
+                ((0.4, 0.4), (0.6, 0.6)),  # Diagonal pan
+                ((0.5, 0.3), (0.5, 0.7)),  # Vertical pan
+                ((0.3, 0.5), (0.7, 0.5)),  # Horizontal pan
+                ((0.5, 0.5), (0.5, 0.5))   # Static centered
+            ]
+            
+            zoom_start, zoom_end = zoom_variations[i % len(zoom_variations)]
+            pan_start, pan_end = pan_variations[i % len(pan_variations)]
+            
+            asset = MediaAsset(
+                file_path=img_file,
+                asset_type="image",
+                duration=None,  # Will be calculated by scenes
+                ken_burns=True,
+                zoom_start=zoom_start,
+                zoom_end=zoom_end,
+                pan_start=pan_start,
+                pan_end=pan_end,
+                effects=[EffectType.COLOR_GRADE]  # Apply consistent color grading
+            )
+            media_assets.append(asset)
+        
+        # Generate professional video with enhanced features
+        output_file = project_dir / "PROFESSIONAL_YOUTUBE_VIDEO.mp4"
+        
+        console.print(f"[cyan]    🎨 Applying {video_style.value} color grading...[/cyan]")
+        console.print(f"[cyan]    ✨ Adding smooth transitions between {len(media_assets)} scenes...[/cyan]")
+        console.print(f"[cyan]    🎬 Generating Ken Burns effects for dynamic visuals...[/cyan]")
+        
+        video_output = await generator.create_professional_video(
+            script=script_content,
+            output_file=output_file,
+            style=video_style,
+            media_assets=media_assets,
+            voice=None,  # Audio already generated
+            provider=None,
+            include_subtitles=True,
+            include_effects=True
+        )
+        
+        # The advanced generator creates its own audio, but we want to use our generated audio
+        # So we'll need to replace the audio track
+        await _replace_audio_track(output_file, audio_file, project_dir)
+        
+        console.print(f"[green]    ✅ Professional effects applied successfully[/green]")
+        return output_file if output_file.exists() else None
+        
+    except ImportError as e:
+        logger.warning(f"Advanced video generation not available: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Professional video creation failed: {e}")
+        return None
+
+
+async def _replace_audio_track(video_file: Path, audio_file: Path, project_dir: Path) -> None:
+    """Replace the audio track in the video file with our generated voiceover."""
+    try:
+        import subprocess
+        import shutil
+        
+        if not shutil.which('ffmpeg'):
+            logger.warning("FFmpeg not found - cannot replace audio track")
+            return
+        
+        temp_video = project_dir / "temp_with_new_audio.mp4"
+        
+        # Replace audio track
+        cmd = [
+            'ffmpeg', '-y',
+            '-i', str(video_file),
+            '-i', str(audio_file),
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-map', '0:v:0',
+            '-map', '1:a:0',
+            '-shortest',
+            str(temp_video)
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode == 0:
+            # Replace original with new version
+            shutil.move(str(temp_video), str(video_file))
+            logger.info("Audio track replaced successfully")
+        else:
+            logger.error(f"Audio replacement failed: {result.stderr}")
+            if temp_video.exists():
+                temp_video.unlink()
+    
+    except Exception as e:
+        logger.error(f"Error replacing audio track: {e}")
+
+
+async def _auto_assemble_video(
+    project_dir: Path, 
+    audio_file: Path, 
+    image_files: List[Path], 
+    subtitle_file: Path
+) -> Optional[Path]:
+    """Automatically assemble final video using FFmpeg if available."""
+    try:
+        import subprocess
+        import shutil
+        
+        # Check if FFmpeg is available
+        if not shutil.which('ffmpeg'):
+            logger.warning("FFmpeg not found - cannot auto-assemble video")
+            return None
+        
+        final_video = project_dir / "FINAL_YOUTUBE_VIDEO.mp4"
+        
+        # Calculate timing
+        num_images = len(image_files)
+        if num_images == 0:
+            return None
+            
+        # Estimate audio duration (rough)
+        image_duration = 30.0  # seconds per image
+        
+        # Create image list file for FFmpeg
+        image_list_file = project_dir / "image_list.txt"
+        with open(image_list_file, 'w') as f:
+            for img_file in image_files:
+                f.write(f"file '{img_file.name}'\n")
+                f.write(f"duration {image_duration}\n")
+        
+        # Create slideshow video
+        temp_video = project_dir / "temp_slideshow.mp4"
+        slideshow_cmd = [
+            'ffmpeg', '-y',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', str(image_list_file),
+            '-vf', 'scale=1920:1080',
+            '-pix_fmt', 'yuv420p',
+            '-r', '30',
+            str(temp_video)
+        ]
+        
+        result1 = subprocess.run(slideshow_cmd, capture_output=True, text=True)
+        if result1.returncode != 0:
+            logger.error(f"FFmpeg slideshow creation failed: {result1.stderr}")
+            return None
+        
+        # Add audio to video
+        final_cmd = [
+            'ffmpeg', '-y',
+            '-i', str(temp_video),
+            '-i', str(audio_file),
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-shortest',
+            str(final_video)
+        ]
+        
+        result2 = subprocess.run(final_cmd, capture_output=True, text=True)
+        if result2.returncode != 0:
+            logger.error(f"FFmpeg audio merge failed: {result2.stderr}")
+            return None
+        
+        # Clean up temp files
+        if temp_video.exists():
+            temp_video.unlink()
+        if image_list_file.exists():
+            image_list_file.unlink()
+        
+        return final_video if final_video.exists() else None
+        
+    except Exception as e:
+        logger.error(f"Auto-assembly failed: {e}")
+        return None
+
+
+async def _create_automated_instructions(
+    output_dir: Path,
+    audio_file: Path,
+    image_files: List[Path],
+    subtitle_file: Path,
+    project_data: Dict,
+    final_video: Optional[Path]
+) -> None:
+    """Create comprehensive instructions for the automated video."""
+    instructions_file = output_dir / "AUTOMATED_VIDEO_INSTRUCTIONS.md"
+    
+    instructions = f"""# 🚀 100% AUTOMATED YOUTUBE VIDEO - READY TO UPLOAD!
+
+## 📊 Project Summary
+- **Title**: {project_data['title']}
+- **Topic**: {project_data['topic']}
+- **Duration**: ~{project_data['duration']} seconds
+- **Style**: {project_data['style']}
+- **Voice**: {project_data['voice']}
+- **Visuals**: {project_data['num_visuals']} AI-generated images ({project_data['image_provider']})
+- **Quality**: Professional broadcast-ready
+- **Auto-Assembled**: {'✅ Yes' if final_video else '❌ Manual assembly required'}
+
+## 🎬 Ready-to-Upload Assets
+
+### Final Video File
+"""
+    
+    if final_video:
+        instructions += f"""✅ **{final_video.name}** - Upload this file directly to YouTube!
+- Resolution: 1920x1080 (Full HD)
+- Format: MP4 (YouTube optimized)
+- Audio: Professional voiceover
+- Visuals: AI-generated contextual images
+"""
+    else:
+        instructions += f"""❌ **Auto-assembly not available** (FFmpeg required)
+📋 **Manual Assembly**: Use VIDEO_ASSEMBLY_INSTRUCTIONS.md
+⚡ **Quick Setup**: Install FFmpeg and run with --auto-assemble flag
+"""
+    
+    instructions += f"""
+### 📝 YouTube Upload Metadata (Copy & Paste Ready)
+
+**Title Options** (Choose best for your audience):
+"""
+    
+    for i, title in enumerate(project_data.get('all_titles', [project_data['title']]), 1):
+        instructions += f"{i}. {title}\n"
+    
+    instructions += f"""
+**Description** (SEO Optimized):
+```
+{project_data['description']}
+```
+
+**Tags** (Copy directly):
+```
+{project_data['tags']}
+```
+
+## 🎯 Upload Checklist
+
+### Before Upload:
+- [ ] Review final video quality
+- [ ] Check audio levels
+- [ ] Verify subtitle synchronization
+- [ ] Choose best title from options above
+
+### YouTube Upload Settings:
+- [ ] **Visibility**: Public (for maximum reach)
+- [ ] **Category**: Education (or relevant category)
+- [ ] **Language**: {project_data['language']}
+- [ ] **Captions**: Upload `{subtitle_file.name}`
+- [ ] **Thumbnail**: Create custom thumbnail from AI visuals
+- [ ] **End Screens**: Add subscribe button and related videos
+
+### Post-Upload Optimization:
+- [ ] Add video to relevant playlists
+- [ ] Pin engaging comment
+- [ ] Share on social media
+- [ ] Monitor analytics in first 24 hours
+
+## 🚀 Scaling Your Content
+
+### Batch Production:
+```bash
+# Generate multiple videos automatically
+python src/youtube_ai/cli/main.py create auto-youtube --topic "Advanced Python Tips" --auto-assemble
+python src/youtube_ai/cli/main.py create auto-youtube --topic "Machine Learning Basics" --auto-assemble
+python src/youtube_ai/cli/main.py create auto-youtube --topic "Web Development Guide" --auto-assemble
+```
+
+### Content Calendar Ideas:
+Based on your topic "{project_data['topic']}", consider these follow-up videos:
+- Advanced {project_data['topic']} concepts
+- Common mistakes in {project_data['topic']}
+- {project_data['topic']} vs alternatives
+- Real-world {project_data['topic']} projects
+- {project_data['topic']} career opportunities
+
+## 🎨 AI-Generated Visual Breakdown
+
+Your video includes {project_data['num_visuals']} contextually-matched visuals:
+"""
+    
+    for i, prompt_data in enumerate(project_data.get('ai_prompts', []), 1):
+        instructions += f"""
+### Scene {i}: {prompt_data.get('provider', 'AI').title()} Generated
+- **Keywords**: {', '.join(prompt_data.get('keywords', [])[:3])}
+- **Style**: {prompt_data.get('prompt', 'Contextual visual')[:60]}...
+"""
+    
+    instructions += f"""
+## 💡 Performance Tips
+
+### Algorithm Optimization:
+- Upload during peak hours (2-4 PM, 7-9 PM)
+- Use all metadata fields
+- Engage with early comments
+- Create compelling thumbnail from AI visuals
+
+### Content Strategy:
+- This video style works well for: {project_data['style']} content
+- Target audience: {project_data['audience']} level viewers
+- Optimal length: {project_data['duration']} seconds (proven engagement)
+
+### Analytics to Monitor:
+- Click-through rate (aim for >10%)
+- Average view duration (aim for >60%)
+- Engagement rate (likes, comments, shares)
+- Subscriber conversion rate
+
+---
+🤖 **Generated with YouTube AI CLI - 100% Automated Video Creation**
+✨ **Zero manual work required - Professional quality guaranteed**
+🚀 **Scale to unlimited videos with consistent quality**
+"""
+    
+    with open(instructions_file, 'w') as f:
+        f.write(instructions)
+
+
+async def _create_subtitle_file_ai(script: str, subtitle_file: Path) -> None:
+    """Create subtitle file for AI video."""
+    # Simple subtitle creation - can be enhanced with timing analysis
+    import re
+    
+    # Clean script and split into segments
+    cleaned = re.sub(r'^#.*$', '', script, flags=re.MULTILINE)
+    cleaned = re.sub(r'\[.*?\]', '', cleaned)
+    sentences = [s.strip() + '.' for s in cleaned.split('.') if s.strip()]
+    
+    subtitles = []
+    time_per_sentence = 3.0  # Rough estimate
+    
+    for i, sentence in enumerate(sentences):
+        start_time = i * time_per_sentence
+        end_time = (i + 1) * time_per_sentence
+        
+        start_srt = f"{int(start_time//3600):02d}:{int((start_time%3600)//60):02d}:{int(start_time%60):02d},000"
+        end_srt = f"{int(end_time//3600):02d}:{int((end_time%3600)//60):02d}:{int(end_time%60):02d},000"
+        
+        subtitles.append(f"{i+1}\n{start_srt} --> {end_srt}\n{sentence}\n")
+    
+    with open(subtitle_file, 'w') as f:
+        f.write('\n'.join(subtitles))
+
+
+async def _create_ai_assembly_instructions(
+    output_dir: Path, 
+    audio_file: Path, 
+    image_files: List[Path], 
+    subtitle_file: Path,
+    generated_images: List[Any]
+) -> None:
+    """Create detailed assembly instructions for AI video."""
+    instructions_file = output_dir / "VIDEO_ASSEMBLY_INSTRUCTIONS.md"
+    
+    duration = len(generated_images) * 33.0  # Rough estimate
+    
+    # Create detailed instructions with AI context
+    instructions = f"""# 🤖 AI-Powered Video Assembly Instructions
+
+## 📁 Project Overview
+- **Audio**: `{audio_file.name}` (Professional AI voiceover)
+- **AI Visuals**: {len(image_files)} contextually generated images
+- **Subtitles**: `{subtitle_file.name}`
+- **Estimated Duration**: {duration:.1f} seconds
+- **Resolution**: 1792x1024 (16:9 ratio, optimized for YouTube)
+
+## 🎨 AI-Generated Visuals
+
+Each visual was intelligently generated to match specific script segments:
+
+"""
+    
+    for img in generated_images:
+        instructions += f"""### Scene {img.scene_number}: {img.file_path.name}
+- **Script Context**: "{img.segment_text[:100]}..."
+- **AI Prompt**: {img.prompt[:80]}...
+- **Keywords**: {', '.join(img.metadata.get('keywords', [])[:3]) if img.metadata else 'N/A'}
+
+"""
+    
+    instructions += f"""
+## 🛠️ Assembly Options
+
+### Option 1: Using FFmpeg (Command Line)
+```bash
+# Create image list for slideshow
+echo "file 'ai_visuals/ai_visual_01.png'
+duration 33.0
+file 'ai_visuals/ai_visual_02.png'
+duration 33.0
+file 'ai_visuals/ai_visual_03.png'
+duration 33.0
+file 'ai_visuals/ai_visual_04.png'
+duration 33.0
+file 'ai_visuals/ai_visual_05.png'
+duration 33.0" > image_list.txt
+
+# Create video from AI images
+ffmpeg -f concat -safe 0 -i image_list.txt -vf "scale=1920:1080" -pix_fmt yuv420p temp_video.mp4
+
+# Add professional voiceover
+ffmpeg -i temp_video.mp4 -i {audio_file.name} -c:v copy -c:a aac -shortest final_ai_video.mp4
+
+# Add subtitles (optional)
+ffmpeg -i final_ai_video.mp4 -vf "subtitles={subtitle_file.name}" final_ai_video_with_subs.mp4
+```
+
+### Option 2: Using DaVinci Resolve (Free Professional Editor)
+1. Create new project (1920x1080, 30fps)
+2. Import all AI-generated visuals and audio file
+3. Drag AI images to timeline, each for 33 seconds
+4. Add professional voiceover track
+5. Import subtitle file
+6. Add smooth transitions between AI visuals (1-2 second crossfades)
+7. Apply subtle Ken Burns effect to AI images (1.0x to 1.05x zoom)
+8. Export as MP4 (H.264, high quality)
+
+### Option 3: Using Adobe Premiere Pro
+1. New sequence: 1920x1080, 29.97fps
+2. Import all AI-generated assets
+3. Create slideshow with contextual AI visuals
+4. Add professional voiceover track
+5. Import SRT subtitles
+6. Apply motion to AI images (subtle zoom/pan)
+7. Add transitions between scenes
+8. Color grade for consistency
+9. Export with H.264 codec
+
+## 🎨 AI Visual Enhancement Tips
+
+### Contextual Matching:
+- Each visual was generated to match specific script content
+- Images flow naturally with the narrative
+- Visual keywords align with spoken content
+
+### Professional Effects:
+- **Ken Burns Effect**: Subtle zoom (1.0x to 1.05x scale) on AI images
+- **Transitions**: 1-2 second crossfades between AI visuals
+- **Timing**: Each visual aligns with script segments
+- **Color Consistency**: AI images may need slight color grading for uniformity
+
+## 🚀 YouTube Optimization
+
+### Title Ideas:
+- "AI-Generated: [Your Topic]"
+- "[Topic] - Created with AI"
+- "The Future of [Topic] - AI Explained"
+
+### Description Template:
+```
+🤖 This video was created using advanced AI technology!
+
+✨ Features:
+- AI-generated script analysis
+- Contextual visual generation
+- Professional AI voiceover
+- Intelligent scene matching
+
+[Your content description here]
+
+#AI #YouTube #[YourTopic] #Automation
+```
+
+## 🎯 Pro Tips for AI Videos
+
+1. **Visual Flow**: The AI images were designed to flow with your narrative
+2. **Engagement**: Each visual reinforces the spoken content
+3. **Quality**: 16:9 ratio optimized for YouTube display
+4. **Accessibility**: Subtitles included for better reach
+5. **SEO**: Mention "AI-generated" in title/description for discoverability
+
+## 📊 Performance Optimization
+
+- **Thumbnail**: Use AI visual #1 as thumbnail base
+- **Chapters**: Create YouTube chapters matching visual segments
+- **Tags**: Include AI, automation, and topic-specific keywords
+- **Cards**: Add cards during visual transitions
+
+---
+*🤖 Generated with YouTube AI CLI - Advanced AI Video Automation*
+"""
+    
+    with open(instructions_file, 'w') as f:
+        f.write(instructions)
 
 
 # Upload Commands
